@@ -4,26 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Porygon Thermal Labels Converter</title>
+    
+    <!-- Favicon (Logo de la pestaña: Caja 📦) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="importmap">
     {
       "imports": {
         "react": "https://esm.sh/react@18.2.0",
-        "react-dom": "https://esm.sh/react-dom@18.2.0",
+        "react-dom": "https://esm.sh/react-dom@18.2.0/client",
         "lucide-react": "https://esm.sh/lucide-react@0.263.1"
       }
     }
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .label-container img {
+            image-rendering: pixelated;
+        }
     </style>
 </head>
-<body class="bg-slate-100">
+<body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
 
     <script type="module">
@@ -32,7 +44,7 @@
         import { 
             Printer, FileText, Download, Trash2, Eye, Copy, 
             CheckCircle, AlertCircle, RefreshCw, ChevronLeft, 
-            ChevronRight, Layers 
+            ChevronRight, Layers, Package
         } from 'lucide-react';
 
         const App = () => {
@@ -51,28 +63,37 @@
             const updatePreview = useCallback(async () => {
                 if (!zpl.trim() || totalLabels === 0) {
                     setError("No se detectaron etiquetas (^XA ... ^XZ)");
+                    setPreviewUrl('');
                     return;
                 }
+                
                 setLoading(true);
                 setError(null);
+                
                 try {
                     const url = `https://api.labelary.com/v1/printers/8dpmm/labels/${labelSize.width}x${labelSize.height}/${currentLabelIndex}/`;
                     const response = await fetch(url, {
                         method: 'POST',
-                        headers: { 'Accept': 'image/png', 'Content-Type': 'application/x-www-form-urlencoded' },
+                        headers: { 
+                            'Accept': 'image/png',
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
                         body: zpl
                     });
+
                     if (response.ok) {
                         const blob = await response.blob();
                         if (previewUrl) URL.revokeObjectURL(previewUrl);
                         setPreviewUrl(URL.createObjectURL(blob));
                     } else {
-                        setError("Error de formato en el código ZPL.");
+                        setError("Error: Formato ZPL inválido o etiqueta fuera de rango.");
                     }
                 } catch (err) {
-                    setError("Error de conexión con el motor de etiquetas.");
-                } finally { setLoading(false); }
-            }, [zpl, labelSize, currentLabelIndex]);
+                    setError("Error de conexión con el motor de renderizado.");
+                } finally {
+                    setLoading(false);
+                }
+            }, [zpl, labelSize, currentLabelIndex, totalLabels]);
 
             const downloadPdf = async () => {
                 setLoading(true);
@@ -80,96 +101,146 @@
                     const url = `https://api.labelary.com/v1/printers/8dpmm/labels/${labelSize.width}x${labelSize.height}/`;
                     const response = await fetch(url, {
                         method: 'POST',
-                        headers: { 'Accept': 'application/pdf', 'Content-Type': 'application/x-www-form-urlencoded' },
+                        headers: { 
+                            'Accept': 'application/pdf',
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
                         body: zpl
                     });
+
                     if (response.ok) {
                         const blob = await response.blob();
+                        const pdfUrl = URL.createObjectURL(blob);
                         const link = document.createElement('a');
-                        link.href = URL.createObjectURL(blob);
-                        link.download = `porygon_batch_${totalLabels}.pdf`;
+                        link.href = pdfUrl;
+                        link.download = `porygon_lote_${totalLabels}_etiquetas.pdf`;
                         link.click();
                     }
-                } finally { setLoading(false); }
+                } catch (err) {
+                    setError("No se pudo generar el PDF.");
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const copyToClipboard = () => {
+                navigator.clipboard.writeText(zpl);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
             };
 
             useEffect(() => {
-                const t = setTimeout(updatePreview, 800);
-                return () => clearTimeout(t);
+                const timeoutId = setTimeout(updatePreview, 800);
+                return () => clearTimeout(timeoutId);
             }, [zpl, labelSize, currentLabelIndex]);
 
-            return React.createElement('div', { className: 'min-h-screen p-4 md:p-8 max-w-7xl mx-auto' }, [
+            return React.createElement('div', { className: 'min-h-screen p-4 md:p-8 flex flex-col' }, [
                 // Header
-                React.createElement('header', { className: 'mb-8 flex flex-col md:flex-row justify-between items-center gap-4' }, [
+                React.createElement('header', { className: 'max-w-7xl mx-auto w-full mb-8 flex flex-col md:flex-row justify-between items-center gap-6' }, [
                     React.createElement('div', { className: 'flex items-center gap-4' }, [
-                        React.createElement('div', { className: 'bg-blue-600 p-3 rounded-2xl shadow-lg' }, 
-                            React.createElement(Printer, { className: 'text-white', size: 28 })),
+                        React.createElement('div', { className: 'bg-blue-600 p-3 rounded-2xl shadow-xl shadow-blue-200 ring-4 ring-blue-50' }, 
+                            React.createElement(Package, { className: 'text-white', size: 32 })),
                         React.createElement('div', null, [
-                            React.createElement('h1', { className: 'text-2xl font-black text-slate-800 tracking-tighter' }, 'PORYGON THERMAL LABELS'),
-                            React.createElement('p', { className: 'text-[10px] font-bold text-slate-400 uppercase tracking-widest' }, 'Online Sales Logistics Engine')
+                            React.createElement('h1', { className: 'text-3xl font-black text-slate-900 tracking-tighter leading-none' }, 'PORYGON'),
+                            React.createElement('p', { className: 'text-xs font-bold text-slate-400 uppercase tracking-widest mt-1' }, 'Thermal Labels Converter')
                         ])
                     ]),
-                    React.createElement('div', { className: 'bg-white p-2 rounded-2xl shadow-sm border flex gap-1' }, 
+                    React.createElement('div', { className: 'bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 flex gap-1' }, 
                         [6, 8, 10].map(h => React.createElement('button', {
                             key: h,
                             onClick: () => setLabelSize({width: 4, height: h}),
-                            className: `px-5 py-2 text-xs font-black rounded-xl transition-all ${labelSize.height === h ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`
+                            className: `px-6 py-2.5 text-xs font-black rounded-xl transition-all duration-200 ${labelSize.height === h ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`
                         }, `4x${h}"`))
                     )
                 ]),
 
-                // Main Content
-                React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-12 gap-8' }, [
-                    // Editor
-                    React.createElement('div', { className: 'lg:col-span-5' }, 
-                        React.createElement('div', { className: 'bg-white rounded-3xl shadow-xl border overflow-hidden flex flex-col h-[700px]' }, [
-                            React.createElement('div', { className: 'px-6 py-4 border-b bg-slate-50 flex justify-between' }, [
-                                React.createElement('span', { className: 'text-xs font-black text-slate-500' }, 'ZPL INPUT'),
-                                React.createElement('button', { onClick: () => setZpl(''), className: 'text-slate-400 hover:text-red-500' }, React.createElement(Trash2, { size: 18 }))
+                // Content
+                React.createElement('main', { className: 'max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1' }, [
+                    // Columna Izquierda: Editor
+                    React.createElement('section', { className: 'lg:col-span-5' }, 
+                        React.createElement('div', { className: 'bg-white rounded-[2rem] shadow-2xl shadow-slate-200 border border-slate-200 overflow-hidden flex flex-col h-[700px]' }, [
+                            React.createElement('div', { className: 'px-6 py-5 border-b bg-slate-50/50 flex justify-between items-center' }, [
+                                React.createElement('h3', { className: 'text-xs font-black text-slate-500 flex items-center gap-2 uppercase tracking-widest' }, [
+                                    React.createElement(FileText, { size: 16 }),
+                                    'Entrada de Datos'
+                                ]),
+                                React.createElement('div', { className: 'flex gap-2' }, [
+                                    React.createElement('button', { onClick: copyToClipboard, title: 'Copiar', className: 'p-2 hover:bg-blue-50 rounded-xl text-slate-600 transition-colors' }, 
+                                        copied ? React.createElement(CheckCircle, { size: 20, className: 'text-green-600' }) : React.createElement(Copy, { size: 20 })),
+                                    React.createElement('button', { onClick: () => { setZpl(''); setPreviewUrl(''); }, title: 'Borrar', className: 'p-2 hover:bg-red-50 rounded-xl text-slate-400 hover:text-red-500 transition-colors' }, 
+                                        React.createElement(Trash2, { size: 20 }))
+                                ])
                             ]),
                             React.createElement('textarea', {
                                 value: zpl,
                                 onChange: (e) => { setZpl(e.target.value); setCurrentLabelIndex(0); },
-                                className: 'flex-1 p-6 font-mono text-[11px] bg-slate-900 text-blue-300 focus:outline-none resize-none'
+                                className: 'flex-1 p-8 font-mono text-[11px] bg-slate-900 text-blue-300 focus:outline-none resize-none leading-relaxed selection:bg-blue-500/30',
+                                placeholder: 'Pega tu código ^XA aquí...',
+                                spellCheck: 'false'
                             }),
-                            React.createElement('div', { className: 'p-4 bg-slate-50 border-t flex justify-between text-[10px] font-bold text-slate-400' }, [
-                                React.createElement('span', null, `${totalLabels} ETIQUETAS`),
-                                React.createElement('span', null, `${zpl.length} BYTES`)
+                            React.createElement('div', { className: 'px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-tighter' }, [
+                                React.createElement('span', { className: 'flex items-center gap-1.5' }, [React.createElement(Layers, { size: 14, className: 'text-blue-500' }), `${totalLabels} Etiquetas Detectadas`]),
+                                React.createElement('span', null, `${zpl.length.toLocaleString()} Bytes`)
                             ])
                         ])
                     ),
 
-                    // Preview
-                    React.createElement('div', { className: 'lg:col-span-7' }, 
-                        React.createElement('div', { className: 'bg-white rounded-3xl shadow-xl border overflow-hidden flex flex-col h-[700px]' }, [
-                            React.createElement('div', { className: 'px-6 py-4 border-b bg-slate-50 flex justify-between items-center' }, [
-                                React.createElement('div', { className: 'flex items-center gap-3' }, [
-                                    totalLabels > 1 && React.createElement('div', { className: 'flex bg-slate-200 rounded-full p-1 items-center' }, [
-                                        React.createElement('button', { disabled: currentLabelIndex === 0, onClick: () => setCurrentLabelIndex(c => c - 1), className: 'p-1 disabled:opacity-20' }, React.createElement(ChevronLeft, { size: 16 })),
-                                        React.createElement('span', { className: 'text-[10px] font-black w-12 text-center' }, `${currentLabelIndex + 1}/${totalLabels}`),
-                                        React.createElement('button', { disabled: currentLabelIndex >= totalLabels - 1, onClick: () => setCurrentLabelIndex(c => c + 1), className: 'p-1 disabled:opacity-20' }, React.createElement(ChevronRight, { size: 16 }))
+                    // Columna Derecha: Vista Previa
+                    React.createElement('section', { className: 'lg:col-span-7' }, 
+                        React.createElement('div', { className: 'bg-white rounded-[2rem] shadow-2xl shadow-slate-200 border border-slate-200 overflow-hidden flex flex-col h-[700px]' }, [
+                            React.createElement('div', { className: 'px-6 py-5 border-b bg-slate-50/50 flex justify-between items-center' }, [
+                                React.createElement('div', { className: 'flex items-center gap-4' }, [
+                                    React.createElement('h3', { className: 'text-xs font-black text-slate-500 uppercase tracking-widest' }, 'Visor de Impresión'),
+                                    totalLabels > 1 && React.createElement('div', { className: 'flex bg-white rounded-full p-1 items-center border border-slate-200 shadow-sm ring-1 ring-slate-100' }, [
+                                        React.createElement('button', { disabled: currentLabelIndex === 0, onClick: () => setCurrentLabelIndex(c => c - 1), className: 'p-1.5 disabled:opacity-20 hover:text-blue-600 transition-colors' }, React.createElement(ChevronLeft, { size: 20 })),
+                                        React.createElement('span', { className: 'text-[11px] font-black w-14 text-center tabular-nums' }, `${currentLabelIndex + 1} / ${totalLabels}`),
+                                        React.createElement('button', { disabled: currentLabelIndex >= totalLabels - 1, onClick: () => setCurrentLabelIndex(c => c + 1), className: 'p-1.5 disabled:opacity-20 hover:text-blue-600 transition-colors' }, React.createElement(ChevronRight, { size: 20 }))
                                     ])
                                 ]),
                                 React.createElement('button', { 
                                     onClick: downloadPdf, 
                                     disabled: loading || totalLabels === 0,
-                                    className: 'bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-lg active:scale-95 disabled:bg-slate-200'
-                                }, [React.createElement(Download, { size: 16 }), 'DESCARGAR PDF'])
+                                    className: 'bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-2xl text-xs font-black flex items-center gap-3 transition-all shadow-xl shadow-blue-100 active:scale-95 disabled:bg-slate-200 disabled:shadow-none'
+                                }, [React.createElement(Download, { size: 18 }), `Descargar PDF` ])
                             ]),
-                            React.createElement('div', { className: 'flex-1 overflow-auto p-10 bg-slate-100/50 flex justify-center items-start relative' }, [
-                                loading && React.createElement('div', { className: 'absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center font-black text-blue-600' }, 'CARGANDO...'),
-                                error && React.createElement('div', { className: 'absolute top-4 inset-x-4 bg-red-600 text-white p-3 rounded-xl text-xs font-bold flex gap-2' }, [React.createElement(AlertCircle, { size: 16 }), error]),
-                                previewUrl ? React.createElement('img', { src: previewUrl, className: 'shadow-2xl border bg-white max-w-full', style: { width: '400px' } }) : 
-                                React.createElement('div', { className: 'mt-32 opacity-10' }, React.createElement(Printer, { size: 80 }))
+                            React.createElement('div', { className: 'flex-1 overflow-auto p-12 bg-slate-100/50 flex justify-center items-start relative' }, [
+                                loading && React.createElement('div', { className: 'absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex flex-col items-center justify-center' }, [
+                                    React.createElement('div', { className: 'w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4' }),
+                                    React.createElement('span', { className: 'text-[10px] font-black text-slate-800 tracking-widest' }, 'RENDERIZANDO...')
+                                ]),
+                                error && React.createElement('div', { className: 'absolute top-6 inset-x-6 bg-red-600 text-white p-5 rounded-2xl text-xs font-bold flex gap-4 shadow-2xl animate-in slide-in-from-top-6 duration-500' }, [
+                                    React.createElement(AlertCircle, { size: 20 }), 
+                                    error
+                                ]),
+                                previewUrl ? React.createElement('div', { className: 'label-container' }, React.createElement('img', { 
+                                    src: previewUrl, 
+                                    className: 'shadow-2xl border border-slate-200 bg-white max-w-full rounded-sm transition-all duration-300 transform hover:scale-[1.01]', 
+                                    style: { width: '400px', height: 'auto' } 
+                                })) : 
+                                React.createElement('div', { className: 'mt-32 opacity-10 flex flex-col items-center gap-6' }, [
+                                    React.createElement(Printer, { size: 120, strokeWidth: 1 }),
+                                    React.createElement('p', { className: 'font-black uppercase tracking-[0.3em] text-sm' }, 'Waiting for ZPL Data')
+                                ])
                             ]),
-                            React.createElement('div', { className: 'p-3 bg-slate-900 text-[9px] font-black text-blue-400 text-center tracking-[0.3em]' }, 'POWERED BY PORYGON ENGINE • 203 DPI')
+                            React.createElement('div', { className: 'px-6 py-4 bg-slate-900 text-[9px] font-black text-blue-400 text-center tracking-[0.5em] uppercase border-t border-slate-800' }, [
+                                'Porygon Engine • v2.1 Pro • Optimized for Apple Display'
+                            ])
                         ])
                     )
+                ]),
+
+                // Footer
+                React.createElement('footer', { className: 'max-w-7xl mx-auto w-full mt-8 flex justify-center' }, [
+                    React.createElement('div', { className: 'bg-white px-6 py-2 rounded-full border border-slate-200 shadow-sm flex items-center gap-3' }, [
+                        React.createElement('div', { className: 'w-2 h-2 bg-green-500 rounded-full animate-pulse' }),
+                        React.createElement('span', { className: 'text-[10px] font-black text-slate-400 uppercase tracking-widest' }, 'Sistema de Lote Activo')
+                    ])
                 ])
             ]);
         };
 
-        ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
     </script>
 </body>
 </html>
